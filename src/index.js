@@ -4,6 +4,8 @@ const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
 const { connectDB } = require('./config/db');
+const authRoutes = require('./routes/authRoutes');
+const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -27,6 +29,12 @@ app.get('/', (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Auth Routes (JWT generation & logout)
+app.use('/', authRoutes);
+
+// Centralized Error Handler
+app.use(errorHandler);
 
 // Start Server and Connect Database
 async function startServer() {
