@@ -31,3 +31,4 @@ module.exports = {
   verifyJWT,
   JWT_SECRET,
 };
+
