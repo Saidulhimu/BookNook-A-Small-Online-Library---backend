@@ -95,4 +95,174 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
+// POST /books - Private Route (add a book)
+router.post('/', verifyJWT, async (req, res, next) => {
+  try {
+    const { title, author, category, image, description, totalCopies, userEmail, userName } = req.body;
+
+    // Validation
+    if (!title || !author || !category || !image || !description) {
+      return res.status(400).json({
+        success: false,
+        message: 'All fields (title, author, category, image, description) are required',
+      });
+    }
+
+    const parsedCopies = parseInt(totalCopies, 10);
+    if (isNaN(parsedCopies) || parsedCopies < 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Total copies must be a non-negative number',
+      });
+    }
+
+    const userEmailFromToken = req.user.email;
+    const finalEmail = userEmail || userEmailFromToken;
+    const finalName = userName || req.user.name || 'Anonymous User';
+
+    const newBook = {
+      title: title.trim(),
+      author: author.trim(),
+      category: category.trim(),
+      image: image.trim(),
+      description: description.trim(),
+      totalCopies: parsedCopies,
+      userEmail: finalEmail,
+      userName: finalName,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const db = getDB();
+    const booksCollection = db.collection('books');
+
+    const result = await booksCollection.insertOne(newBook);
+
+    res.status(201).json({
+      success: true,
+      message: 'Book added successfully',
+      data: {
+        _id: result.insertedId,
+        ...newBook,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PATCH /books/:id - Private Route (update a book)
+router.patch('/:id', verifyJWT, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Book ID format',
+      });
+    }
+
+    const db = getDB();
+    const booksCollection = db.collection('books');
+
+    const existingBook = await booksCollection.findOne({ _id: new ObjectId(id) });
+    if (!existingBook) {
+      return res.status(404).json({
+        success: false,
+        message: 'Book not found',
+      });
+    }
+
+    // Ownership check
+    if (existingBook.userEmail && existingBook.userEmail !== req.user.email) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You can only update books you have added',
+      });
+    }
+
+    const { title, author, category, image, description, totalCopies } = req.body;
+
+    const updateDoc = {
+      $set: {
+        updatedAt: new Date(),
+      },
+    };
+
+    if (title !== undefined) updateDoc.$set.title = title.trim();
+    if (author !== undefined) updateDoc.$set.author = author.trim();
+    if (category !== undefined) updateDoc.$set.category = category.trim();
+    if (image !== undefined) updateDoc.$set.image = image.trim();
+    if (description !== undefined) updateDoc.$set.description = description.trim();
+    if (totalCopies !== undefined) {
+      const parsed = parseInt(totalCopies, 10);
+      if (!isNaN(parsed) && parsed >= 0) {
+        updateDoc.$set.totalCopies = parsed;
+      }
+    }
+
+    const updateResult = await booksCollection.updateOne(
+      { _id: new ObjectId(id) },
+      updateDoc
+    );
+
+    const updatedBook = await booksCollection.findOne({ _id: new ObjectId(id) });
+
+    res.json({
+      success: true,
+      message: 'Book updated successfully',
+      data: updatedBook,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /books/:id - Private Route (delete a book)
+router.delete('/:id', verifyJWT, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Book ID format',
+      });
+    }
+
+    const db = getDB();
+    const booksCollection = db.collection('books');
+    const borrowsCollection = db.collection('borrows');
+
+    const existingBook = await booksCollection.findOne({ _id: new ObjectId(id) });
+    if (!existingBook) {
+      return res.status(404).json({
+        success: false,
+        message: 'Book not found',
+      });
+    }
+
+    // Ownership check
+    if (existingBook.userEmail && existingBook.userEmail !== req.user.email) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You can only delete books you have added',
+      });
+    }
+
+    await booksCollection.deleteOne({ _id: new ObjectId(id) });
+    // Clean up any remaining borrows for this book
+    await borrowsCollection.deleteMany({ bookId: id });
+
+    res.json({
+      success: true,
+      message: 'Book deleted successfully',
+      data: { id },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;
