@@ -1,16 +1,19 @@
 const express = require('express');
 const cors = require('cors');
-const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
+if (!process.env.JWT_SECRET) {
+  console.error('JWT_SECRET is not set in .env');
+  process.exit(1);
+}
+
 const { connectDB } = require('./config/db');
-const authRoutes = require('./routes/authRoutes');
 const bookRoutes = require('./routes/bookRoutes');
 const borrowRoutes = require('./routes/borrowRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
 
 // Middleware
@@ -21,7 +24,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
-app.use(cookieParser());
 
 // Root Health Check Route
 app.get('/', (req, res) => {
@@ -31,9 +33,6 @@ app.get('/', (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
-
-// Auth Routes (JWT generation & logout)
-app.use('/', authRoutes);
 
 // Books API Routes
 app.use('/books', bookRoutes);
@@ -47,7 +46,9 @@ app.use(errorHandler);
 // Start Server and Connect Database
 async function startServer() {
   try {
-    await connectDB();
+    const db = await connectDB();
+    // One active borrow per user per book, enforced by the database (no race conditions).
+    await db.collection('borrows').createIndex({ bookId: 1, userEmail: 1 }, { unique: true });
   } catch (error) {
     console.warn('⚠️ Warning: Initial MongoDB connection failed:', error.message);
     console.warn('👉 Please update MONGODB_URI in your .env file with your valid cluster connection string.');

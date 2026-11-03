@@ -4,7 +4,7 @@ Backend server for **BookNook – A Small Online Library**, built with **Express
 
 ## 🚀 Live Server URL
 - **Production Server:** `https://booknook-backend.onrender.com` (Or deployed Render / Vercel instance)
-- **Local Server:** `http://localhost:5000`
+- **Local Server:** `http://localhost:5001`
 
 ---
 
@@ -36,11 +36,14 @@ Backend server for **BookNook – A Small Online Library**, built with **Express
 | `GET` | `/borrows` | Private (JWT) | Get all active borrows for the authenticated user |
 | `DELETE` | `/borrows/:id` | Private (JWT) | Return a borrowed book and increment book copies back by 1 |
 
-### Authentication & Token Endpoints
-| Method | Route | Access | Description |
-|---|---|---|---|
-| `POST` | `/jwt` | Public | Sign and issue a JWT token upon client login |
-| `POST` | `/logout` | Public | Clear authentication cookie |
+### Authentication
+Login, registration and Google sign-in are handled in the Next.js app with BetterAuth (MongoDB adapter). The frontend exchanges its session for a JWT; this server only **verifies** that JWT (`Authorization: Bearer <token>`) with the shared `JWT_SECRET`. A health check is available at `GET /`.
+
+---|---|---|---|
+| `POST` | `/auth/register` | Public | Create an account (bcrypt-hashed password) |
+| `POST` | `/auth/login` | Public | Verify credentials and issue a JWT |
+| `GET` | `/auth/me` | Private | Current user from the token |
+| `POST` | `/auth/logout` | Public | Clear authentication cookie |
 | `GET` | `/` | Public | Health check route |
 
 ---
@@ -49,16 +52,19 @@ Backend server for **BookNook – A Small Online Library**, built with **Express
 Create a `.env` file in the root directory:
 
 ```env
-PORT=5000
+PORT=5001
 MONGODB_URI=your_mongodb_connection_string
 DB_NAME=booknook
-JWT_SECRET=your_jwt_secret_key
+JWT_SECRET=your_jwt_secret_key   # must match JWT_SECRET in the frontend .env
 CLIENT_URL=http://localhost:3000
 ```
 
 ---
 
 ## 📦 Installation & Running Locally
+
+To fill an empty database with sample books run `npm run seed` (safe to re-run, it only adds missing titles).
+
 
 1. Clone repository:
    ```bash

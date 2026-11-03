@@ -5,26 +5,29 @@ const { verifyJWT } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
+const escapeRegex = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const str = (v) => (typeof v === 'string' ? v.trim() : '');
+
 // GET /books - Public Route (all books, new arrivals, search/filter)
 router.get('/', async (req, res, next) => {
   try {
     const db = getDB();
     const booksCollection = db.collection('books');
 
-    const { sort, limit, category, search, userEmail } = req.query;
+    const { limit, category, search, userEmail } = req.query;
 
     const query = {};
 
     // Filter by category if provided
     if (category && category !== 'All') {
-      query.category = { $regex: new RegExp(`^${category}$`, 'i') };
+      query.category = { $regex: `^${escapeRegex(category)}$`, $options: 'i' };
     }
 
     // Search by title or author
     if (search && search.trim() !== '') {
       query.$or = [
-        { title: { $regex: search.trim(), $options: 'i' } },
-        { author: { $regex: search.trim(), $options: 'i' } },
+        { title: { $regex: escapeRegex(search.trim()), $options: 'i' } },
+        { author: { $regex: escapeRegex(search.trim()), $options: 'i' } },
       ];
     }
 
@@ -35,12 +38,8 @@ router.get('/', async (req, res, next) => {
 
     let cursor = booksCollection.find(query);
 
-    // Sort by newest if requested or default to createdAt desc
-    if (sort === 'newest') {
-      cursor = cursor.sort({ createdAt: -1 });
-    } else {
-      cursor = cursor.sort({ createdAt: -1 });
-    }
+    // Newest books first
+    cursor = cursor.sort({ createdAt: -1 });
 
     // Apply limit if specified (e.g. limit=6 for New Arrivals on Home)
     if (limit) {
@@ -98,7 +97,12 @@ router.get('/:id', async (req, res, next) => {
 // POST /books - Private Route (add a book)
 router.post('/', verifyJWT, async (req, res, next) => {
   try {
-    const { title, author, category, image, description, totalCopies, userEmail, userName } = req.body;
+    const { totalCopies } = req.body;
+    const title = str(req.body.title);
+    const author = str(req.body.author);
+    const category = str(req.body.category);
+    const image = str(req.body.image);
+    const description = str(req.body.description);
 
     // Validation
     if (!title || !author || !category || !image || !description) {
@@ -116,16 +120,16 @@ router.post('/', verifyJWT, async (req, res, next) => {
       });
     }
 
-    const userEmailFromToken = req.user.email;
-    const finalEmail = userEmail || userEmailFromToken;
-    const finalName = userName || req.user.name || 'Anonymous User';
+    // Owner always comes from the verified token, never from the request body.
+    const finalEmail = req.user.email;
+    const finalName = req.user.name || 'Anonymous User';
 
     const newBook = {
-      title: title.trim(),
-      author: author.trim(),
-      category: category.trim(),
-      image: image.trim(),
-      description: description.trim(),
+      title,
+      author,
+      category,
+      image,
+      description,
       totalCopies: parsedCopies,
       userEmail: finalEmail,
       userName: finalName,
@@ -190,11 +194,11 @@ router.patch('/:id', verifyJWT, async (req, res, next) => {
       },
     };
 
-    if (title !== undefined) updateDoc.$set.title = title.trim();
-    if (author !== undefined) updateDoc.$set.author = author.trim();
-    if (category !== undefined) updateDoc.$set.category = category.trim();
-    if (image !== undefined) updateDoc.$set.image = image.trim();
-    if (description !== undefined) updateDoc.$set.description = description.trim();
+    if (typeof title === 'string' && title.trim()) updateDoc.$set.title = title.trim();
+    if (typeof author === 'string' && author.trim()) updateDoc.$set.author = author.trim();
+    if (typeof category === 'string' && category.trim()) updateDoc.$set.category = category.trim();
+    if (typeof image === 'string' && image.trim()) updateDoc.$set.image = image.trim();
+    if (typeof description === 'string' && description.trim()) updateDoc.$set.description = description.trim();
     if (totalCopies !== undefined) {
       const parsed = parseInt(totalCopies, 10);
       if (!isNaN(parsed) && parsed >= 0) {
@@ -202,10 +206,7 @@ router.patch('/:id', verifyJWT, async (req, res, next) => {
       }
     }
 
-    const updateResult = await booksCollection.updateOne(
-      { _id: new ObjectId(id) },
-      updateDoc
-    );
+    await booksCollection.updateOne({ _id: new ObjectId(id) }, updateDoc);
 
     const updatedBook = await booksCollection.findOne({ _id: new ObjectId(id) });
 
