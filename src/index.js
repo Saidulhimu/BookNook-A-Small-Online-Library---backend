@@ -48,13 +48,15 @@ app.use(errorHandler);
 async function startServer() {
   try {
     await connectDB();
-    app.listen(PORT, () => {
-      console.log(`🚀 BookNook Server listening on port ${PORT}`);
-    });
   } catch (error) {
-    console.error('Fatal Server Startup Error:', error);
-    process.exit(1);
+    console.warn('⚠️ Warning: Initial MongoDB connection failed:', error.message);
+    console.warn('👉 Please update MONGODB_URI in your .env file with your valid cluster connection string.');
   }
+
+  app.listen(PORT, () => {
+    console.log(`🚀 BookNook Server listening on port ${PORT}`);
+    console.log(`📡 Health Check: http://localhost:${PORT}/`);
+  });
 }
 
 if (process.env.NODE_ENV !== 'test') {
