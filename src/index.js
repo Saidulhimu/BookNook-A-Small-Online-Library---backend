@@ -6,6 +6,7 @@ require('dotenv').config();
 const { connectDB } = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const bookRoutes = require('./routes/bookRoutes');
+const borrowRoutes = require('./routes/borrowRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -36,6 +37,9 @@ app.use('/', authRoutes);
 
 // Books API Routes
 app.use('/books', bookRoutes);
+
+// Borrows API Routes
+app.use('/borrows', borrowRoutes);
 
 // Centralized Error Handler
 app.use(errorHandler);
