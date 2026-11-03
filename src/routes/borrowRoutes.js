@@ -94,4 +94,81 @@ router.post('/', verifyJWT, async (req, res, next) => {
   }
 });
 
+// GET /borrows - Private Route (get borrows of logged in user)
+router.get('/', verifyJWT, async (req, res, next) => {
+  try {
+    const userEmail = req.user.email;
+    const db = getDB();
+    const borrowsCollection = db.collection('borrows');
+
+    const userBorrows = await borrowsCollection
+      .find({ userEmail })
+      .sort({ borrowDate: -1 })
+      .toArray();
+
+    res.json({
+      success: true,
+      count: userBorrows.length,
+      data: userBorrows,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /borrows/:id - Private Route (return a book and increment available copies)
+router.delete('/:id', verifyJWT, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userEmail = req.user.email;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Borrow ID format',
+      });
+    }
+
+    const db = getDB();
+    const booksCollection = db.collection('books');
+    const borrowsCollection = db.collection('borrows');
+
+    // Find the borrow record belonging to this user
+    const borrowRecord = await borrowsCollection.findOne({
+      _id: new ObjectId(id),
+      userEmail,
+    });
+
+    if (!borrowRecord) {
+      return res.status(404).json({
+        success: false,
+        message: 'Borrow record not found or does not belong to you',
+      });
+    }
+
+    // Increment copies back by 1 in books collection
+    if (borrowRecord.bookId && ObjectId.isValid(borrowRecord.bookId)) {
+      await booksCollection.updateOne(
+        { _id: new ObjectId(borrowRecord.bookId) },
+        { $inc: { totalCopies: 1 } }
+      );
+    }
+
+    // Delete borrow record
+    await borrowsCollection.deleteOne({ _id: new ObjectId(id) });
+
+    res.json({
+      success: true,
+      message: `Successfully returned "${borrowRecord.bookTitle}". Thank you!`,
+      data: {
+        id,
+        bookId: borrowRecord.bookId,
+        bookTitle: borrowRecord.bookTitle,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;
